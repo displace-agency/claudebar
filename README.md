@@ -42,8 +42,8 @@ First launch on an unsigned build: right-click **ClaudeBar.app** â†’ **Open** â†
 ## Build from source
 
 ```bash
-git clone https://github.com/<your-user>/ClaudeBar.git
-cd ClaudeBar
+git clone https://github.com/displace-agency/claudebar.git
+cd claudebar
 ./scripts/build-app.sh
 open build/ClaudeBar.app
 ```
