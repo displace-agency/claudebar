@@ -22,10 +22,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         monitor = UsageMonitor()
 
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        statusItem.isVisible = true
+        statusItem.behavior = []
+        statusItem.autosaveName = "agency.displace.ClaudeBar.status"
         if let button = statusItem.button {
-            button.image = Self.makeStatusIcon()
-            button.imagePosition = .imageLeading
-            button.title = " …"
+            // Render the whole menu bar label into a single bitmap image and
+            // hand that to the button. This bypasses the macOS 26 bug where
+            // NSStatusBarButton's cell draws attributedTitle + template images
+            // at zero alpha on ad-hoc-signed apps.
+            button.image = Self.renderBarImage(text: "⏺ …", color: .white)
+            button.imagePosition = .imageOnly
+            button.title = ""
             button.target = self
             button.action = #selector(statusItemClicked(_:))
             button.sendAction(on: [.leftMouseUp, .rightMouseUp])
@@ -52,49 +59,44 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
     private func updateStatusItemTitle() {
         guard let button = statusItem.button else { return }
-        // UsageMonitor still prefixes the text with "◐ " — strip that now
-        // that we render the bar-chart SF Symbol next to it.
         var text = monitor.menuBarText
         if text.hasPrefix("◐ ") { text = String(text.dropFirst(2)) }
-        text = " " + text
 
         let color: NSColor
         switch monitor.menuBarColor {
         case .green: color = .systemGreen
         case .amber: color = .systemOrange
         case .red: color = .systemRed
-        case .neutral: color = .controlTextColor
+        case .neutral: color = .white
         }
-        let font = NSFont.monospacedDigitSystemFont(ofSize: NSFont.systemFontSize(for: .small), weight: .medium)
-        let attr = NSAttributedString(
-            string: text,
-            attributes: [.foregroundColor: color, .font: font]
-        )
-        // macOS 26 can drop the template image when the attributed title is
-        // set if the icon isn't reseated. Reassign the image + position every
-        // update so both stay visible in the bar.
-        if button.image == nil { button.image = Self.makeStatusIcon() }
-        button.imagePosition = .imageLeading
-        button.attributedTitle = attr
-        // Only tint the template image on colored states. Leaving it nil for
-        // neutral lets the system resolve the menu-bar appearance correctly,
-        // which fixes the "invisible icon" regression on macOS 26.
-        switch monitor.menuBarColor {
-        case .neutral:
-            button.contentTintColor = nil
-        case .green, .amber, .red:
-            button.contentTintColor = color
-        }
+        button.image = Self.renderBarImage(text: "⏺ " + text, color: color)
+        button.imagePosition = .imageOnly
+        button.title = ""
+        button.contentTintColor = nil
     }
 
-    private static func makeStatusIcon() -> NSImage? {
-        let config = NSImage.SymbolConfiguration(pointSize: 13, weight: .medium)
-        let icon = NSImage(
-            systemSymbolName: "chart.bar.xaxis",
-            accessibilityDescription: "Claude usage"
-        )?.withSymbolConfiguration(config)
-        icon?.isTemplate = true
-        return icon
+    /// Pre-renders the menu bar label into a single non-template NSImage.
+    /// Works around a macOS 26 regression where NSStatusBarButton draws
+    /// attributedTitle + template images at zero alpha for ad-hoc signed apps.
+    private static func renderBarImage(text: String, color: NSColor) -> NSImage {
+        let font = NSFont.monospacedDigitSystemFont(ofSize: NSFont.systemFontSize(for: .small), weight: .medium)
+        let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: color]
+        let attr = NSAttributedString(string: text, attributes: attrs)
+
+        let textSize = attr.size()
+        let padding: CGFloat = 4
+        let size = NSSize(
+            width: ceil(textSize.width) + padding * 2,
+            height: NSStatusBar.system.thickness
+        )
+
+        let image = NSImage(size: size)
+        image.lockFocus()
+        let origin = NSPoint(x: padding, y: (size.height - textSize.height) / 2)
+        attr.draw(at: origin)
+        image.unlockFocus()
+        image.isTemplate = false
+        return image
     }
 
     @objc private func statusItemClicked(_ sender: NSStatusBarButton) {
