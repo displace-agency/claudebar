@@ -8,7 +8,7 @@ on:
       version:
         description: 'Version (e.g. 0.1.0)'
         required: true
-        default: '0.1.0'
+        default: '1.0.0'
 
 jobs:
   build:
@@ -20,32 +20,47 @@ jobs:
 
       - name: Determine version
         id: ver
+        env:
+          REQUESTED_VERSION: ${{ github.event.inputs.version }}
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            VERSION="$REQUESTED_VERSION"
           else
-            echo "version=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
+            VERSION="${GITHUB_REF_NAME#v}"
           fi
+          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][A-Za-z0-9.]+)?$ ]] || exit 1
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Select Xcode
         run: sudo xcode-select -s /Applications/Xcode.app
 
+      - name: Test
+        run: swift test
+
       - name: Build .app
+        env:
+          CODESIGN_IDENTITY: "-" # CI preview; distribution signing requires a configured identity.
         run: ./scripts/build-app.sh ${{ steps.ver.outputs.version }}
 
       - name: Build DMG
         run: ./scripts/build-dmg.sh ${{ steps.ver.outputs.version }}
 
+      - name: Checksum
+        working-directory: build
+        run: shasum -a 256 RelayBar-${{ steps.ver.outputs.version }}.dmg > SHA256SUMS.txt
+
       - name: Release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: build/ClaudeBar-${{ steps.ver.outputs.version }}.dmg
+          files: |
+            build/RelayBar-${{ steps.ver.outputs.version }}.dmg
+            build/SHA256SUMS.txt
           generate_release_notes: true
 
       - name: Upload artifact (manual runs)
         if: github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@v4
         with:
-          name: ClaudeBar-${{ steps.ver.outputs.version }}
-          path: build/ClaudeBar-${{ steps.ver.outputs.version }}.dmg
+          name: RelayBar-${{ steps.ver.outputs.version }}
+          path: build/RelayBar-${{ steps.ver.outputs.version }}.dmg

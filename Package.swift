@@ -2,12 +2,14 @@
 import PackageDescription
 
 let package = Package(
-    name: "ClaudeBar",
+    name: "RelayBar",
     platforms: [.macOS(.v13)],
+    products: [.executable(name: "RelayBar", targets: ["ClaudeBar"])],
     targets: [
         .executableTarget(
             name: "ClaudeBar",
             path: "Sources/ClaudeBar"
-        )
+        ),
+        .testTarget(name: "ClaudeBarTests", dependencies: ["ClaudeBar"])
     ]
 )

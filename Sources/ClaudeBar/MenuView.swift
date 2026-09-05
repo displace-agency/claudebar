@@ -3,14 +3,20 @@ import ServiceManagement
 
 struct MenuView: View {
     @ObservedObject var monitor: UsageMonitor
-    @State private var selectedTab: Tab = .overview
+    @State private var selectedTab: Tab = .limits
     @State private var launchAtLogin: Bool = SMAppService.mainApp.status == .enabled
 
     enum Tab: String, CaseIterable, Identifiable {
+        case limits = "Limits"
         case overview = "Overview"
         case sessions = "Sessions"
         case history = "History"
         var id: String { rawValue }
+    }
+
+    init(monitor: UsageMonitor, initialTab: Tab = .limits) {
+        self.monitor = monitor
+        _selectedTab = State(initialValue: initialTab)
     }
 
     var body: some View {
@@ -24,14 +30,29 @@ struct MenuView: View {
                 .padding(.horizontal, 14)
                 .padding(.vertical, 8)
             Divider()
+            if selectedTab != .limits {
+                Picker("Provider", selection: $monitor.selectedProvider) {
+                    Text("Claude").tag(SubscriptionProvider.claude)
+                    Text("Codex").tag(SubscriptionProvider.codex)
+                }
+                .pickerStyle(.segmented)
+                .padding(.horizontal, 14)
+                .padding(.top, 10)
+            }
             ScrollView {
-                Group {
+                VStack(alignment: .leading, spacing: 10) {
+                    if selectedTab != .limits {
+                        Text("Local activity · input + output tokens, excluding cache tokens.")
+                            .font(.caption2).foregroundStyle(.secondary)
+                    }
                     switch selectedTab {
+                    case .limits: SubscriptionView(subscriptions: monitor.subscriptions, isLoading: monitor.isLoading)
                     case .overview: OverviewTab(snapshot: monitor.snapshot)
                     case .sessions: SessionsTab(snapshot: monitor.snapshot)
                     case .history: HistoryTab(snapshot: monitor.snapshot)
                     }
                 }
+                .environment(\.showsAPICost, monitor.selectedProvider == .claude)
                 .padding(14)
             }
             .frame(maxHeight: .infinity)
@@ -46,13 +67,9 @@ struct MenuView: View {
     private var header: some View {
         HStack(spacing: 10) {
             VStack(alignment: .leading, spacing: 2) {
-                Text("Claude Usage").font(.headline)
-                if let b = monitor.snapshot.activeBlock, let rate = b.burnRate {
-                    Text("\(formatTokens(Int(rate.tokensPerMinute)))/min · \(b.projection?.remainingMinutes ?? 0) min left")
-                        .font(.caption2).foregroundStyle(.secondary)
-                } else {
-                    Text("Idle").font(.caption2).foregroundStyle(.secondary)
-                }
+                Text("RelayBar").font(.headline)
+                Text("Claude + Codex · subscription limits & local activity")
+                    .font(.caption2).foregroundStyle(.secondary)
             }
             Spacer()
             Button {
@@ -62,6 +79,7 @@ struct MenuView: View {
             }
             .buttonStyle(.plain)
             .disabled(monitor.isLoading)
+            .help("Refresh subscription limits and local token activity")
         }
     }
 
@@ -114,13 +132,16 @@ struct MenuView: View {
 }
 
 private struct OverviewTab: View {
+    @Environment(\.showsAPICost) private var showsAPICost
     let snapshot: UsageSnapshot
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             todayBlock
-            Divider()
-            activeBlock
+            if showsAPICost {
+                Divider()
+                activeBlock
+            }
             Divider()
             modelsBlock
         }
@@ -128,7 +149,7 @@ private struct OverviewTab: View {
 
     private var todayBlock: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("Today").sectionLabel()
+            Text("Today · local token activity").sectionLabel()
             if let d = snapshot.today {
                 HeroTokens(tokens: d.totalTokens, cost: d.costUSD)
                 HStack(spacing: 14) {
@@ -148,13 +169,15 @@ private struct OverviewTab: View {
 
     private var activeBlock: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("Active 5-hour block").sectionLabel()
+            Text("Inferred 5-hour activity block").sectionLabel()
+            Text("Estimated from local activity, independent of subscription resets.")
+                .font(.caption2).foregroundStyle(.tertiary)
             if let b = snapshot.activeBlock {
                 HeroTokens(tokens: b.totalTokens, cost: b.costUSD)
                 if let r = b.burnRate, let p = b.projection {
                     HStack(spacing: 14) {
                         Stat(label: "Rate", value: "\(formatTokens(Int(r.tokensPerMinute)))/min")
-                        Stat(label: "Remaining", value: "\(p.remainingMinutes) min")
+                        Stat(label: "Block ends in", value: "\(p.remainingMinutes) min")
                         Stat(label: "Projected", value: formatTokens(p.totalTokens))
                     }
                     .padding(.top, 4)
@@ -222,6 +245,7 @@ private struct SessionsTab: View {
 }
 
 private struct SessionRow: View {
+    @Environment(\.showsAPICost) private var showsAPICost
     let session: SessionEntry
     var body: some View {
         HStack(alignment: .center, spacing: 10) {
@@ -250,8 +274,10 @@ private struct SessionRow: View {
                 Text(formatTokens(session.tokens.totalTokens))
                     .font(.system(size: 13, weight: .semibold))
                     .monospacedDigit()
-                Text(String(format: "≈ $%.2f", session.costUSD))
-                    .font(.caption2).foregroundStyle(.tertiary).monospacedDigit()
+                if showsAPICost {
+                    Text(String(format: "≈ $%.2f", session.costUSD))
+                        .font(.caption2).foregroundStyle(.tertiary).monospacedDigit()
+                }
             }
         }
         .padding(.vertical, 6)
@@ -264,10 +290,15 @@ private struct SessionRow: View {
 }
 
 private struct HistoryTab: View {
+    @Environment(\.showsAPICost) private var showsAPICost
     let snapshot: UsageSnapshot
 
+    private func recentDays(_ count: Int) -> [DailyEntry] {
+        calendarDays(snapshot.daily, count: count)
+    }
+
     private var last7DaysTokens: Int {
-        Array(snapshot.daily.prefix(7)).reduce(0) { $0 + $1.totalTokens }
+        recentDays(7).reduce(0) { $0 + $1.totalTokens }
     }
 
     private var weeklyBuckets: [(weekStart: Date, tokens: Int, cost: Double)] {
@@ -295,8 +326,8 @@ private struct HistoryTab: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack(spacing: 10) {
-                TotalsCard(label: "Last 7 days", tokens: last7DaysTokens, cost: snapshot.last7DaysCost)
-                TotalsCard(label: "Last 30 days", tokens: snapshot.last30DaysTokens, cost: snapshot.last30DaysCost)
+                TotalsCard(label: "Last 7 days", tokens: last7DaysTokens, cost: recentDays(7).reduce(0) { $0 + $1.costUSD })
+                TotalsCard(label: "Last 30 days", tokens: recentDays(30).reduce(0) { $0 + $1.totalTokens }, cost: recentDays(30).reduce(0) { $0 + $1.costUSD })
                 TotalsCard(
                     label: "All time",
                     tokens: snapshot.allTimeTokens,
@@ -334,7 +365,7 @@ private struct HistoryTab: View {
 
             VStack(alignment: .leading, spacing: 8) {
                 Text("Daily tokens (last 30)").sectionLabel()
-                let recent = Array(snapshot.daily.prefix(30))
+                let recent = recentDays(30)
                 if recent.isEmpty {
                     Text("—").foregroundStyle(.secondary).font(.caption)
                 } else {
@@ -358,8 +389,10 @@ private struct HistoryTab: View {
                                 VStack(alignment: .trailing, spacing: 0) {
                                     Text(formatTokens(d.totalTokens))
                                         .font(.caption2).monospacedDigit()
-                                    Text(String(format: "≈ $%.0f", d.costUSD))
-                                        .font(.caption2).foregroundStyle(.tertiary).monospacedDigit()
+                                    if showsAPICost {
+                                        Text(String(format: "≈ $%.0f", d.costUSD))
+                                            .font(.caption2).foregroundStyle(.tertiary).monospacedDigit()
+                                    }
                                 }
                                 .frame(width: 62, alignment: .trailing)
                             }
@@ -409,6 +442,7 @@ private struct HistoryTab: View {
 }
 
 private struct HeroTokens: View {
+    @Environment(\.showsAPICost) private var showsAPICost
     let tokens: Int
     let cost: Double
     var body: some View {
@@ -419,13 +453,16 @@ private struct HeroTokens: View {
             Text("tokens")
                 .font(.caption).foregroundStyle(.secondary)
             Spacer()
-            Text(String(format: "≈ $%.2f API", cost))
-                .font(.caption2).foregroundStyle(.tertiary).monospacedDigit()
+            if showsAPICost {
+                Text(String(format: "≈ $%.2f API", cost))
+                    .font(.caption2).foregroundStyle(.tertiary).monospacedDigit()
+            }
         }
     }
 }
 
 private struct TotalsCard: View {
+    @Environment(\.showsAPICost) private var showsAPICost
     let label: String
     let tokens: Int
     let cost: Double
@@ -436,8 +473,10 @@ private struct TotalsCard: View {
             Text(formatTokens(tokens))
                 .font(.system(size: 16, weight: .semibold, design: .rounded))
                 .monospacedDigit()
-            Text(String(format: "≈ $%.0f API", cost))
-                .font(.caption2).foregroundStyle(.tertiary).monospacedDigit()
+            if showsAPICost {
+                Text(String(format: "≈ $%.0f API", cost))
+                    .font(.caption2).foregroundStyle(.tertiary).monospacedDigit()
+            }
             if let sub {
                 Text(sub).font(.caption2).foregroundStyle(.tertiary).lineLimit(1)
             }
@@ -467,6 +506,7 @@ private struct Stat: View {
 }
 
 private struct ModelBreakdownView: View {
+    @Environment(\.showsAPICost) private var showsAPICost
     let models: [ModelUsage]
     var body: some View {
         let total = max(models.reduce(0) { $0 + $1.tokens.totalTokens }, 1)
@@ -475,7 +515,8 @@ private struct ModelBreakdownView: View {
                 HStack(spacing: 8) {
                     Text(m.family)
                         .font(.caption).fontWeight(.medium)
-                        .frame(width: 56, alignment: .leading)
+                        .frame(width: 72, alignment: .leading)
+                        .lineLimit(1).help(m.model)
                     GeometryReader { geo in
                         ZStack(alignment: .leading) {
                             RoundedRectangle(cornerRadius: 3)
@@ -489,8 +530,10 @@ private struct ModelBreakdownView: View {
                     VStack(alignment: .trailing, spacing: 0) {
                         Text(formatTokens(m.tokens.totalTokens))
                             .font(.caption2).monospacedDigit()
-                        Text(String(format: "≈ $%.2f", m.costUSD))
-                            .font(.caption2).foregroundStyle(.tertiary).monospacedDigit()
+                        if showsAPICost {
+                            Text(String(format: "≈ $%.2f", m.costUSD))
+                                .font(.caption2).foregroundStyle(.tertiary).monospacedDigit()
+                        }
                     }
                     .frame(width: 62, alignment: .trailing)
                 }
@@ -517,4 +560,31 @@ private extension Text {
     func sectionLabel() -> some View {
         self.font(.caption).fontWeight(.medium).foregroundStyle(.secondary).textCase(.uppercase)
     }
+}
+
+private struct ShowsAPICostKey: EnvironmentKey {
+    static let defaultValue = true
+}
+
+private extension EnvironmentValues {
+    var showsAPICost: Bool {
+        get { self[ShowsAPICostKey.self] }
+        set { self[ShowsAPICostKey.self] = newValue }
+    }
+}
+
+/// Calendar ranges include today and exclude future or older activity.
+func calendarDays(_ days: [DailyEntry], count: Int, now: Date = Date(), calendar: Calendar = .current) -> [DailyEntry] {
+    guard count > 0,
+          let start = calendar.date(byAdding: .day, value: -(count - 1), to: calendar.startOfDay(for: now)),
+          let end = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: now)) else { return [] }
+    let formatter = DateFormatter()
+    formatter.calendar = calendar
+    formatter.locale = Locale(identifier: "en_US_POSIX")
+    formatter.timeZone = calendar.timeZone
+    formatter.dateFormat = "yyyy-MM-dd"
+    return days.filter {
+        guard let date = formatter.date(from: $0.date) else { return false }
+        return date >= start && date < end
+    }.sorted { $0.date > $1.date }
 }

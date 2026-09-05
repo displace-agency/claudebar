@@ -1,101 +1,110 @@
-# ClaudeBar
+# RelayBar
 
-A tiny macOS menu bar app that shows your Claude Code usage in real time. Token-first, because if you're on a subscription plan tokens are what actually matter.
+**Know how much Claude and Codex you have left, and when each weekly limit resets.**
+
+A free, open-source Mac menu bar app. Formerly ClaudeBar.
+
+[**Download for Mac**](https://github.com/displace-agency/relaybar/releases/latest) · [Report an issue](https://github.com/displace-agency/relaybar/issues)
 
 <p align="center">
-  <img src="docs/screenshots/overview.png" width="460" alt="Overview tab"/>
+  <img src="docs/screenshots/relaybar-limits-light.png" width="420" alt="RelayBar showing Claude and Codex weekly quota remaining and reset countdowns" />
 </p>
 
-## Why it exists
+## Get started
 
-`ccusage` is great from the terminal, but most of the day you don't want to open a terminal to check how close you are to filling your 5-hour block. ClaudeBar puts the number in your menu bar, tints it by burn rate, and drops a compact popover with everything you'd want.
+1. Download the DMG from [Releases](https://github.com/displace-agency/relaybar/releases/latest).
+2. Open it and drag **RelayBar** into **Applications**.
+3. Open RelayBar. Click its menu bar item to see your limits.
 
-It also reframes the dashboard around **tokens**, not dollars. On Claude Pro / Max plans the dollar figure is hypothetical — tokens are the real resource. The cost is still displayed, but as a muted `≈ $X API` hint so you can see what that usage would cost at public API rates.
+Requires **macOS 13 or later**, on Apple Silicon or Intel, and an existing **Claude Code and/or Codex login** on this Mac. Each provider works independently. RelayBar uses your existing subscription login; it does not require another account.
 
-## Features
+**First launch:** this community build is not Apple-notarized. If macOS blocks it, first try opening it, then use **System Settings → Privacy & Security → Open Anyway** if you trust the download. See [Apple's instructions](https://support.apple.com/en-us/102445). Do not disable Gatekeeper globally.
 
-- **Live 5-hour block cost + burn rate** in the menu bar (green < $5/hr, amber < $15/hr, red ≥ $15/hr)
-- **Overview** — today's tokens, active block, burn rate, model breakdown (Opus / Sonnet / Haiku)
-- **Sessions** — one row per conversation, grouped by project folder, sort by *Recent* or *Biggest*
-- **History** — 7-day, 30-day, all-time totals + weekly bars chart + 30-day daily chart
-- **Smart session naming** — even for sessions that ran from your home directory, ClaudeBar infers the project by scanning the first user messages for `/websites/<project>` or `CLIENTS/<client>` references
-- **Cache hit rate** — see what % of your context is being reused from cache (higher = cheaper, more efficient)
-- Launch at login, native SwiftUI, ~1.6 MB binary, no Electron
+**Upgrading from ClaudeBar?** Quit ClaudeBar first, replace it with RelayBar, and keep one copy in Applications. The bundle identity stays the same so existing settings can carry over.
 
-## Screenshots
+## What you can see
 
-| Sessions (per-project breakdown) | History (weekly + daily) |
-|---|---|
-| <img src="docs/screenshots/sessions.png" width="360"/> | <img src="docs/screenshots/history.png" width="360"/> |
+- **Limits:** both weekly quotas, reset countdowns, exact local reset dates, and shorter session windows when the provider reports them.
+- **Menu bar:** weekly reset countdowns for Claude (`C`) and Codex (`O`). A `~` means the reading is stale.
+- **Overview:** today's local token activity and model breakdown for the selected provider.
+- **Sessions:** local conversations grouped by project, sorted by recent activity or size.
+- **History:** calendar-based 7-day and 30-day totals, daily activity, and weekly charts.
+- **Launch at login:** an optional native setting.
 
-## Install
+<p align="center">
+  <img src="docs/screenshots/relaybar-limits-dark.png" width="360" alt="RelayBar weekly countdowns in dark mode" />
+  <img src="docs/screenshots/relaybar-codex-overview.png" width="360" alt="RelayBar showing real local Codex token activity and model usage" />
+</p>
 
-Download the latest `ClaudeBar-x.y.z.dmg` from [Releases](../../releases), open it, drag **ClaudeBar** to `/Applications`, and launch.
+Screenshots show real readings captured during development. Your percentages, reset dates, and available windows will differ.
 
-First launch on an unsigned build: right-click **ClaudeBar.app** → **Open** → **Open** (macOS Gatekeeper).
+## What the numbers mean
 
-## Requirements
+**Subscription quota and token history are different measurements.** The providers supply the quota percentages and reset timestamps. RelayBar does not estimate a subscription's allowance from token counts or assume a fixed number of tokens for a “20x” plan.
 
-- macOS 13 Ventura or later
-- That's it. No Node.js, no external CLI, no sign-in.
+Codex's quota is for **Codex usage on your ChatGPT plan**. It is not a combined meter for every ChatGPT model, OpenAI API billing, or all activity on other devices.
+
+Local token history comes from files on this Mac:
+
+- Claude Code: `~/.claude/projects/`
+- Codex: `~/.codex/sessions/` and `~/.codex/archived_sessions/`, or `CODEX_HOME` when set
+
+The headline token total is new input plus output. Cache reads and cache writes are displayed separately. Codex reasoning output is not counted twice, and repeated cumulative records across resumed/archived sessions are deduplicated.
+
+Claude's optional dollar figures are approximate API equivalents using the original app's model-family rate table, **not subscription charges or a billing reconciliation**. Codex dollar estimates are hidden.
+
+## Privacy and reliability
+
+- Conversation text stays on your Mac. No telemetry or analytics.
+- Subscription checks make read-only HTTPS requests to Anthropic and OpenAI usage endpoints.
+- Existing credentials are read into memory from Claude's Keychain entry (or its credential-file fallback) and Codex's existing `auth.json`.
+- RelayBar never saves credentials, changes accounts, refreshes login tokens, or makes paid model requests.
+- Quota checks run at most once per minute and back off after rate-limit responses.
+- Unknown reset dates stay unknown. Failed checks show an error alongside any last-known reading and its timestamp.
+- Quota checks run independently from local history scanning. A large history can take longer on first launch; unchanged files are cached in memory afterward.
+
+Usage endpoints follow [claude-swap](https://github.com/realiti4/claude-swap) and the [Codex backend client](https://github.com/openai/codex/tree/main/codex-rs/backend-client). Provider changes can require app updates. RelayBar is an independent project and is not affiliated with Anthropic or OpenAI.
+
+## Troubleshooting
+
+**One provider is unavailable:** open that provider's CLI and verify you are signed in with a subscription. Wait a minute, then refresh RelayBar. API-key-only logins do not provide subscription quota.
+
+**Credentials expired or access denied:** reconnect in Claude Code or Codex. RelayBar deliberately does not change your login. A custom CLI configuration must also be visible to the app process.
+
+**No session window:** some accounts only return a weekly window. RelayBar shows the data the provider supplies.
+
+**History takes time to load:** the initial scan reads existing local transcripts. Quota cards can load while that work finishes.
 
 ## Build from source
 
-```bash
-git clone https://github.com/displace-agency/claudebar.git
-cd claudebar
-./scripts/build-app.sh
-open build/ClaudeBar.app
-```
-
-Requires Xcode Command Line Tools (`xcode-select --install`).
-
-## How it works
-
-ClaudeBar parses `~/.claude/projects/**/*.jsonl` directly in Swift. These files are the raw transcripts Claude Code writes for each session; they contain every token count and model used.
-
-On each refresh (every 60 s) the parser:
-
-1. Walks every JSONL file under `~/.claude/projects/`
-2. Caches parsed results keyed by file mtime, so unchanged files are skipped (~392 files × 100 ms cold → < 20 ms warm)
-3. Streams each line, extracts `timestamp`, `model`, and `usage.{input,output,cache_creation,cache_read}_tokens`
-4. Deduplicates by `(messageId, requestId)` to avoid double-counting resumed sessions
-5. Aggregates into: today, active 5-hour block, per-session, per-model, per-day
-
-**Nothing leaves your machine.** No analytics, no telemetry, no network calls.
-
-### What counts as a "token"
-
-`total = input + output` — the tokens Claude actually read and generated.
-
-- `cache_creation` and `cache_read` are shown separately. Cache reads in particular are reported as "Cache hits" with a reuse percentage, because a high cache-hit rate is a *good* thing: it means you're keeping context warm and spending less per turn.
-- If you prefer the other convention (input + output + cache_creation), open an issue and I'll add a toggle.
-
-### Session naming
-
-Sessions that ran inside a real project folder show that folder's basename. Sessions that ran from the home directory (e.g. quick one-off questions) are scanned for the first 40 lines of transcript; if they mention `/websites/<name>` or `CLIENTS/<name>` the project is inferred and marked `(inferred)`. About 80% of home-dir sessions get recovered this way.
-
-### Cost numbers
-
-Costs are estimates based on Anthropic's public per-million-token rates:
-
-| Family | Input | Output | Cache write | Cache read |
-|---|---|---|---|---|
-| Opus 4.x | $15 | $75 | $18.75 | $1.50 |
-| Sonnet 4.x | $3 | $15 | $3.75 | $0.30 |
-| Haiku 4.5 | $1 | $5 | $1.25 | $0.10 |
-
-They match `ccusage` within rounding. They do **not** reflect what you actually pay if you're on a subscription plan — they show what the same usage would cost at public API rates.
-
-## Release
-
-Tag a version and push — GitHub Actions builds the universal binary and attaches a DMG to the release:
+Requires Xcode Command Line Tools.
 
 ```bash
-git tag v0.4.0
-git push --tags
+git clone https://github.com/displace-agency/relaybar.git
+cd relaybar
+swift test
+./scripts/build-app.sh 1.0.0
 ```
 
-## License
+Output: `build/RelayBar.app`, universal for Apple Silicon and Intel. The build does not install or launch it. Previous build output is preserved before replacement.
 
-MIT
+Builds use ad-hoc signing by default. Set `CODESIGN_IDENTITY` to an installed signing identity for a stable local signature. Apple notarization is not configured.
+
+The internal Swift module remains `ClaudeBar` and the bundle identifier remains `agency.displace.ClaudeBar` for continuity.
+
+Optional developer checks:
+
+```bash
+RELAYBAR_LIVE_USAGE_TEST=1 swift test --filter SubscriptionUsageTests
+RELAYBAR_PREVIEW_DIR=/tmp/relaybar-preview swift test --filter PreviewTests
+```
+
+Live checks print sanitized quota summaries only. Fixture tests require no login or network. See [test coverage](docs/QA.md).
+
+## Credits and license
+
+Built by [Displace Agency](https://github.com/displace-agency).
+
+Codex transcript schema handling is adapted from Flavio Adamo's MIT-licensed SpendBar; its license is retained in the source. Claude quota research follows realiti4's claude-swap. No account-switching dependency is installed.
+
+[MIT License](LICENSE)

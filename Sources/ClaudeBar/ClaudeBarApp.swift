@@ -3,7 +3,7 @@ import AppKit
 import Combine
 
 @main
-struct ClaudeBarApp: App {
+struct RelayBarApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
     var body: some Scene {
@@ -123,7 +123,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         let menu = NSMenu()
         menu.addItem(NSMenuItem(title: "Refresh", action: #selector(refreshFromMenu), keyEquivalent: "r"))
         menu.addItem(.separator())
-        menu.addItem(NSMenuItem(title: "Quit ClaudeBar", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
+        menu.addItem(NSMenuItem(title: "Quit RelayBar", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
         statusItem.menu = menu
         sender.performClick(nil)
         statusItem.menu = nil

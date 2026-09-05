@@ -3,13 +3,13 @@
 <plist version="1.0">
 <dict>
     <key>CFBundleExecutable</key>
-    <string>ClaudeBar</string>
+    <string>RelayBar</string>
     <key>CFBundleIdentifier</key>
     <string>agency.displace.ClaudeBar</string>
     <key>CFBundleName</key>
-    <string>ClaudeBar</string>
+    <string>RelayBar</string>
     <key>CFBundleDisplayName</key>
-    <string>ClaudeBar</string>
+    <string>RelayBar</string>
     <key>CFBundleVersion</key>
     <string>1</string>
     <key>CFBundleShortVersionString</key>
